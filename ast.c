@@ -13,10 +13,14 @@ static void print_word(const char *s) {
   putchar('"');
   for (; *s; s++) {
     unsigned char c = (unsigned char)*s;
-    if (c == '"' || c == '\\') printf("\\%c", c);
-    else if (c == '\n') fputs("\\n", stdout);
-    else if (c == '\t') fputs("\\t", stdout);
-    else if (c < 0x20 || c == 0x7f) printf("\\x%02x", c);
+    if (c == '"' || c == '\\') 
+      printf("\\%c", c);
+    else if (c == '\n') 
+      fputs("\\n", stdout);
+    else if (c == '\t') 
+      fputs("\\t", stdout);
+    else if (c < 0x20 || c == 0x7f) 
+      printf("\\x%02x", c);
     else putchar(c);
   }
   putchar('"');
