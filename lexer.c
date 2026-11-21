@@ -4,6 +4,7 @@
 
 typedef struct { char *v; size_t n, cap; } Buf;
 
+// растущий буфер слова
 static int buf_put(Buf *b, char c) {
   if (b->n + 1 >= b->cap) {
     size_t cap = b->cap ? b->cap * 2 : 32;
@@ -16,6 +17,7 @@ static int buf_put(Buf *b, char c) {
   return 0;
 }
 
+// массив лексем
 static int push(Tokens *t, TokenKind k, char *text) {
   Token *p = realloc(t->v, (t->n + 1) * sizeof(*p));
   if (!p) return -1;
@@ -26,6 +28,7 @@ static int push(Tokens *t, TokenKind k, char *text) {
   return 0;
 }
 
+// освобождает строки токенов и массив
 void free_tokens(Tokens *t) {
   for (size_t i = 0; i < t->n; i++) free(t->v[i].text);
   free(t->v);
@@ -33,6 +36,7 @@ void free_tokens(Tokens *t) {
   t->n = 0;
 }
 
+// возвращает имя типа токена
 const char *token_name(TokenKind k) {
   switch (k) {
     case T_WORD: return "WORD";
@@ -52,6 +56,7 @@ const char *token_name(TokenKind k) {
   return "?";
 }
 
+// возвращает запись оператора для сообщений
 const char *token_symbol(TokenKind k) {
   switch (k) {
     case T_PIPE: return "|";
@@ -71,10 +76,12 @@ const char *token_symbol(TokenKind k) {
   return "?";
 }
 
+// метасимволы
 static bool is_meta(char c) {
   return c == ' ' || c == '\t' || c == '\n' || strchr("|&;()<>", c) != NULL;
 }
 
+// проверка только на цифры
 static bool all_digits(const Buf *b) {
   if (b->n == 0) return false;
   for (size_t i = 0; i < b->n; i++)
@@ -82,11 +89,13 @@ static bool all_digits(const Buf *b) {
   return true;
 }
 
+// копирование текста ошибки в выделенную память
 static char *dup_msg(const char *m) {
   char *s = strdup(m);
   return s;
 }
 
+// основной цикл
 int lex_line(const char *s, Tokens *out, char **error) {
   memset(out, 0, sizeof(*out));
   *error = NULL;
@@ -97,7 +106,10 @@ int lex_line(const char *s, Tokens *out, char **error) {
 
   while (s[i]) {
     char c = s[i];
-    if (c == ' ' || c == '\t') { i++; continue; }
+    if (c == ' ' || c == '\t') { 
+      i++;
+      continue; 
+    }
     if (c == '\n') {
       if (push(out, T_NL, NULL)) goto fail;
       i++;
@@ -107,7 +119,8 @@ int lex_line(const char *s, Tokens *out, char **error) {
       while (s[i] && s[i] != '\n') i++;
       continue;
     }
-
+    
+    // операторы
     TokenKind k = T_END;
     size_t width = 1;
     if (c == '&' && s[i + 1] == '&') k = T_AND, width = 2;
@@ -130,14 +143,18 @@ int lex_line(const char *s, Tokens *out, char **error) {
     bool started = false, quoted = false;
     while (s[i] && !is_meta(s[i])) {
       c = s[i];
-      if (c == '\'') {                   
+      if (c == '\'') {                   // одинарные кавычки
         started = quoted = true;
         i++;
         while (s[i] && s[i] != '\'')
           if (buf_put(&b, s[i++])) goto fail;
-        if (!s[i]) { rc = LEX_UNCLOSED; msg = "unexpected EOF while looking for matching `''"; goto fail; }
+        if (!s[i]) { 
+          rc = LEX_UNCLOSED;
+          msg = "unexpected EOF while looking for matching `''";
+          goto fail; 
+        }
         i++;
-      } else if (c == '"') {              
+      } else if (c == '"') {              // двойные кавычки
         started = quoted = true;
         i++;
         while (s[i] && s[i] != '"') {
@@ -148,11 +165,19 @@ int lex_line(const char *s, Tokens *out, char **error) {
             i += 2;
           } else if (buf_put(&b, s[i++])) goto fail;
         }
-        if (!s[i]) { rc = LEX_UNCLOSED; msg = "unexpected EOF while looking for matching `\"'"; goto fail; }
+        if (!s[i]) { 
+          rc = LEX_UNCLOSED;
+          msg = "unexpected EOF while looking for matching `\"'";
+          goto fail; 
+        }
         i++;
-      } else if (c == '\\') {
+      } else if (c == '\\') {  // обратная косая
         if (s[i + 1] == '\n') {
-          if (!s[i + 2]) { rc = LEX_CONTINUE; msg = "line continuation"; goto fail; }
+          if (!s[i + 2]) { 
+            rc = LEX_CONTINUE; 
+            msg = "line continuation"; 
+            goto fail; 
+          }
           i += 2;                         
         } else if (!s[i + 1]) {           
           if (buf_put(&b, '\\')) goto fail;
@@ -171,7 +196,7 @@ int lex_line(const char *s, Tokens *out, char **error) {
     }
     if (!started) continue;               
 
-    if (!quoted && (s[i] == '<' || s[i] == '>') && all_digits(&b)) {
+    if (!quoted && (s[i] == '<' || s[i] == '>') && all_digits(&b)) { // специальный случай с 2>
       rc = LEX_ERROR;
       msg = "redirection with a file descriptor number is not supported";
       goto fail;
@@ -180,7 +205,10 @@ int lex_line(const char *s, Tokens *out, char **error) {
     char *text = b.v;                     
     b.v = NULL;
     b.n = b.cap = 0;
-    if (push(out, T_WORD, text)) { free(text); goto fail; }
+    if (push(out, T_WORD, text)) { 
+      free(text); 
+      goto fail; 
+    }
   }
   if (push(out, T_END, NULL)) goto fail;
   free(b.v);
