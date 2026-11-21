@@ -18,11 +18,13 @@ static TokenKind peek(const Parser *p) {
     return p->t->v[p->p].kind; 
 }
 
+// записывает текст ошибки, если её ещё нет
 static void fail(Parser *p, const char *msg) {
   if (!*p->err && !p->incomplete) 
       *p->err = strdup(msg);
 }
 
+// формирует сообщение для текущего токена о синтаксической ошибке
 static void fail_token(Parser *p) {
   if (*p->err || p->incomplete) return;
   const Token *t = &p->t->v[p->p];
@@ -37,10 +39,12 @@ static void fail_token(Parser *p) {
   *p->err = m;
 }
 
+// сдвиг позиции через подряд идущие T_NL
 static void skip_nl(Parser *p) {
   while (peek(p) == T_NL) p->p++;
 }
 
+// выделение и инициализация узла
 static Node *node(NodeKind k, Node *l, Node *r) {
   Node *n = calloc(1, sizeof(*n));
   if (n) {
@@ -51,6 +55,7 @@ static Node *node(NodeKind k, Node *l, Node *r) {
   return n;
 }
 
+// создание узла-родителя
 static Node *make(Parser *p, NodeKind k, Node *l, Node *r) {
   Node *n = node(k, l, r);
   if (!n) {
@@ -61,6 +66,7 @@ static Node *make(Parser *p, NodeKind k, Node *l, Node *r) {
   return n;
 }
 
+// рекурсивное освобождение дерева
 void free_node(Node *n) {
   if (!n) return;
   free_node(n->left);
@@ -77,6 +83,7 @@ void free_node(Node *n) {
   free(n);
 }
 
+// добавление строки в argv простого узла
 static int addword(Node *n, const char *s) {
   char **v = realloc(n->argv, (n->argc + 2) * sizeof(*v));
   if (!v) return -1;
@@ -88,8 +95,10 @@ static int addword(Node *n, const char *s) {
   return 0;
 }
 
+// проверка на одно из 3 перенаправлений
 static bool is_redir_op(TokenKind k) { return k == T_IN || k == T_OUT || k == T_APPEND; }
 
+// разбор перенаправлений
 static int redir(Node *n, Parser *p) {
   TokenKind k = peek(p);
   p->p++;
@@ -115,6 +124,7 @@ static int redir(Node *n, Parser *p) {
   return 0;
 }
 
+// команда в скобках
 static Node *subshell(Parser *p) {
   p->p++;                                  
   if (++p->depth > MAX_DEPTH) { 
@@ -138,6 +148,7 @@ static Node *subshell(Parser *p) {
   return n;
 }
 
+// простая команда
 static Node *command(Parser *p) {
   if (peek(p) == T_LP) return subshell(p);
 
@@ -174,6 +185,7 @@ static Node *command(Parser *p) {
   return n;
 }
 
+// конвейеры |
 static Node *pipeline(Parser *p) {
   Node *n = command(p);
   if (!n) return NULL;
@@ -188,6 +200,7 @@ static Node *pipeline(Parser *p) {
   return n;
 }
 
+// && и ||
 static Node *andor(Parser *p) {
   Node *n = pipeline(p);
   if (!n) return NULL;
@@ -206,6 +219,7 @@ static Node *andor(Parser *p) {
   return n;
 }
 
+// ;, & и переводы строк
 static Node *list(Parser *p) {
   Node *n = andor(p);
   if (!n) return NULL;
@@ -230,6 +244,7 @@ static Node *list(Parser *p) {
   return n;
 }
 
+// входная функция
 int parse_tokens(const Tokens *t, Node **out, char **error) {
   Parser p = {t, 0, error, false, 0};
   *error = NULL;
