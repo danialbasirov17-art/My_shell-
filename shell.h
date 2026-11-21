@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+// лексер
 typedef enum {
   T_WORD, T_PIPE, T_AMP, T_SEMI, T_NL, T_AND, T_OR,
   T_LP, T_RP, T_IN, T_OUT, T_APPEND, T_END
@@ -13,6 +14,7 @@ typedef enum {
 typedef struct { TokenKind kind; char *text; } Token;
 typedef struct { Token *v; size_t n; } Tokens;
 
+// Результат lex_line
 typedef enum {
   LEX_OK = 0,
   LEX_ERROR = -1,
@@ -25,6 +27,7 @@ void free_tokens(Tokens *t);
 const char *token_name(TokenKind k);    
 const char *token_symbol(TokenKind k);  
 
+// Дерево
 typedef enum { R_IN, R_OUT, R_APPEND } RedirKind;
 typedef struct Redir { RedirKind kind; char *path; struct Redir *next; } Redir;
 
@@ -48,13 +51,12 @@ typedef enum {
 int parse_tokens(const Tokens *t, Node **out, char **error);
 void free_node(Node *n);
 
-void print_ast(const Node *n, int depth);
-char *ast_to_string(const Node *n); 
+void print_ast(const Node *n, int depth); 
+char *ast_to_string(const Node *n); // таблица заданий
 
-int execute(Node *n, int last_status);
+int execute(Node *n, int last_status); // исполнитель 
 
-
-
+// builtins
 bool is_builtin(const char *name);
 int run_builtin(char **argv, int last_status);
 bool shell_exit_requested(void);
@@ -62,14 +64,16 @@ int shell_exit_code(void);
 void builtin_line_begin(void);          
 bool builtin_eof_blocked(void);         
 
+// jobs
 typedef struct Job Job;
 typedef enum { JOB_RUNNING, JOB_STOPPED, JOB_DONE } JobState;
 
 void jobs_init(bool interactive);
 bool jobs_enabled(void);            
 void jobs_shutdown(void);
-void jobs_notify(bool print);     
+void jobs_notify(bool print);
 
+// запуск
 Job *jobs_new(const char *cmd, bool background);
 int jobs_add_proc(Job *j, pid_t pid);
 pid_t jobs_pgid(const Job *j);         
@@ -78,6 +82,7 @@ int jobs_run_fg(Job *j);
 int jobs_run_bg(Job *j);
 void jobs_child_start(pid_t pgid, bool foreground);
 
+// встроенные команды
 Job *jobs_find_spec(const char *spec);  
 Job *jobs_current(void);
 int jobs_id(const Job *j);
