@@ -19,7 +19,7 @@ enum {
 
 static int run_tree(Node *n, int last);
 
-
+// проход перенаправлений слева направо
 static int apply_redirs(const Redir *r) {
   for (; r; r = r->next) {
     int target = r->kind == R_IN ? STDIN_FILENO : STDOUT_FILENO;
@@ -50,11 +50,13 @@ static int apply_redirs(const Redir *r) {
 
 typedef struct { int fd[STD_FDS]; } SavedFds;
 
+// хранит копии стандартных дескрипторов
 static void save_fds(SavedFds *s) {
   for (int i = 0; i < STD_FDS; i++) 
       s->fd[i] = fcntl(i, F_DUPFD_CLOEXEC, SAVED_FD_MIN);
 }
 
+// восстановление исходных дескрипторов
 static void restore_fds(SavedFds *s) {
   for (int i = 0; i < STD_FDS; i++) {
     if (s->fd[i] < 0) continue;        
@@ -64,7 +66,7 @@ static void restore_fds(SavedFds *s) {
   }
 }
 
-
+// запуск builtin в самом shell
 static int run_builtin_inproc(Node *n, int last) {
   SavedFds saved;
   int rc;
@@ -90,12 +92,14 @@ static int run_builtin_inproc(Node *n, int last) {
   return rc;
 }
 
+// завершение потомка
 [[noreturn]] static void child_exit(int rc) {
   fflush(stdout);
   if (shell_exit_requested()) rc = shell_exit_code();   /* exit внутри подоболочки */
   _exit(rc & EXIT_MASK);
 }
 
+// вызов execvp
 [[noreturn]] static void exec_external(char **argv) {
   execvp(argv[0], argv);
   int e = errno;
@@ -109,6 +113,7 @@ static int run_builtin_inproc(Node *n, int last) {
   _exit(e == ENOENT ? STATUS_NOT_FOUND : STATUS_CANNOT_EXEC);
 }
 
+// точка исполнения одной стадии задания
 [[noreturn]] static void exec_stage(Node *n, int last) {
   switch (n->kind) {
     case N_SIMPLE:
@@ -125,12 +130,14 @@ static int run_builtin_inproc(Node *n, int last) {
   }
 }
 
+// переносит fd через dup2()
 static void move_fd(int from, int to) {
   if (from == to) return;
   dup2(from, to);
   close(from);
 }
 
+// запуск одной или нескольких стадий
 static int launch_job(Node **stages, size_t cnt, const char *cmd, bool bg, int last) {
   Job *job = jobs_new(cmd, bg);
   if (!job) return STATUS_FAIL;
@@ -189,10 +196,12 @@ static int launch_job(Node **stages, size_t cnt, const char *cmd, bool bg, int l
   return failed ? STATUS_FAIL : rc;
 }
 
+// рекурсивно считает стадии в цепочке N_PIPE
 static size_t count_stages(const Node *n) {
   return n->kind == N_PIPE ? count_stages(n->left) + count_stages(n->right) : 1;
 }
 
+// превращение узлов конвейера в плоский массив стадий
 static void flatten(Node *n, Node **v, size_t *k) {
   if (n->kind == N_PIPE) {
     flatten(n->left, v, k);
@@ -202,6 +211,7 @@ static void flatten(Node *n, Node **v, size_t *k) {
   }
 }
 
+// обход дерева
 static int run_as_job(Node *n, bool bg, int last) {
   char *cmd = ast_to_string(n);
   size_t cnt = n->kind == N_PIPE ? count_stages(n) : 1, k = 0;
@@ -220,7 +230,7 @@ static int run_as_job(Node *n, bool bg, int last) {
   return rc;
 }
 
-
+// выбор действия по типу узла
 static int run_tree(Node *n, int last) {
   if (!n) return last;
   switch (n->kind) {
