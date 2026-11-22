@@ -17,13 +17,16 @@ enum {
   KILL_LIST_COLUMNS = 5
 };
 
+
 static bool request_exit;
 static int requested_code;
 static bool exit_warned_prev, exit_warned_now;
 
+// узнаём, запросил ли builtin exit и с каким кодом
 bool shell_exit_requested(void) { return request_exit; }
 int shell_exit_code(void) { return requested_code; }
 
+// таблица сигналов
 static const struct { const char *name; int num; } signals[] = {
   {"HUP", SIGHUP}, {"INT", SIGINT}, {"QUIT", SIGQUIT}, {"ILL", SIGILL},
   {"TRAP", SIGTRAP}, {"ABRT", SIGABRT}, {"BUS", SIGBUS}, {"FPE", SIGFPE},
@@ -37,6 +40,7 @@ static const struct { const char *name; int num; } signals[] = {
 
 enum { SIGNUM_MAX = 64 };
 
+// разбирает номер или имя сигнала
 static int parse_signal(const char *s) {
   if (!*s) return -1;
   if (isdigit((unsigned char)*s)) {
@@ -50,12 +54,14 @@ static int parse_signal(const char *s) {
   return -1;
 }
 
+// ищет известное имя по номеру
 static const char *signal_name(int num) {
   for (size_t i = 0; i < NSIGNALS; i++)
     if (signals[i].num == num) return signals[i].name;
   return NULL;
 }
 
+// проверка, что строка целиком - число
 static bool parse_long(const char *s, long *out) {
   if (!*s) return false;
   char *end;
@@ -66,6 +72,7 @@ static bool parse_long(const char *s, long *out) {
   return true;
 }
 
+// перед выходом восстановления
 static bool exit_blocked(void) {
   if (!jobs_enabled() || !jobs_has_stopped() || exit_warned_prev) return false;
   fprintf(stderr, "mysh: There are stopped jobs.\n");
@@ -73,14 +80,16 @@ static bool exit_blocked(void) {
   return true;
 }
 
+// перенос состояния предупреждения между вводами
 void builtin_line_begin(void) {
   exit_warned_prev = exit_warned_now;
   exit_warned_now = false;
 }
 
+// позволяет главному циклу применить такую же проверку
 bool builtin_eof_blocked(void) { return exit_blocked(); }
 
-
+// cd
 static int bi_cd(char **a) {
   if (a[1] && a[2]) {
     fprintf(stderr, "mysh: cd: too many arguments\n");
@@ -100,6 +109,7 @@ static int bi_cd(char **a) {
   return 0;
 }
 
+// pwd
 static int bi_pwd(void) {
   char b[PATH_MAX];
   if (!getcwd(b, sizeof b)) {
@@ -110,6 +120,7 @@ static int bi_pwd(void) {
   return 0;
 }
 
+// echo
 static int bi_echo(char **a) {
   int i = 1;
   bool newline = true;
@@ -125,6 +136,7 @@ static int bi_echo(char **a) {
   return 0;
 }
 
+// справка
 static int bi_help(void) {
   puts("mysh built-in commands:\n"
        "  cd [dir]                change the current directory\n"
@@ -141,6 +153,7 @@ static int bi_help(void) {
   return 0;
 }
 
+// берёт статус, который исполнитель передал builtin
 static int bi_exit(char **a, int last) {
   int code = last;
   if (a[1]) {
@@ -161,6 +174,7 @@ static int bi_exit(char **a, int last) {
   return requested_code;
 }
 
+// вывод всех заданий
 static int bi_jobs(char **a) {
   if (!a[1]) {
     jobs_print(NULL);
@@ -179,6 +193,7 @@ static int bi_jobs(char **a) {
   return rc;
 }
 
+// 
 static Job *resolve_job(const char *name, const char *spec) {
   if (!spec) return jobs_current();
   if (spec[0] == '%') return jobs_find_spec(spec);
@@ -188,6 +203,7 @@ static Job *resolve_job(const char *name, const char *spec) {
   (void)name;
 }
 
+// fg
 static int bi_fg(char **a) {
   if (!jobs_enabled()) {
     fprintf(stderr, "mysh: fg: no job control\n");
@@ -209,6 +225,7 @@ static int bi_fg(char **a) {
   return jobs_continue_fg(j);
 }
 
+// bg
 static int bi_bg(char **a) {
   if (!jobs_enabled()) {
     fprintf(stderr, "mysh: bg: no job control\n");
@@ -233,6 +250,7 @@ static int bi_bg(char **a) {
   return rc;
 }
 
+// kill
 static int kill_list(char **a) {
   if (a[2]) {                             
     int rc = 0;
@@ -313,6 +331,7 @@ static int bi_kill(char **a) {
   return rc;
 }
 
+// wait
 static int bi_wait(char **a) {
   if (!a[1]) return jobs_wait_all();
   int rc = 0;
@@ -348,15 +367,16 @@ static int bi_wait(char **a) {
 }
 
 
-static const char *const names[] = {"cd", "pwd", "echo", "help", "exit",
-                                    "jobs", "fg", "bg", "kill", "wait"};
+static const char *const names[] = {"cd", "pwd", "echo", "help", "exit", "jobs", "fg", "bg", "kill", "wait"};
 
+// сравнивает имя команды со списком встроенных 
 bool is_builtin(const char *name) {
   for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
     if (!strcmp(name, names[i])) return true;
   return false;
 }
 
+// направляет вызов к нужной функции
 int run_builtin(char **a, int last) {
   const char *n = a[0];
   if (!strcmp(n, "cd")) return bi_cd(a);
