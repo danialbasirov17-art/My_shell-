@@ -3,12 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-
+// делает отступ
 static void indent(int depth) {
   for (int i = 0; i < depth; i++) 
     fputs("  ", stdout);
 }
 
+// заключает текст в двойные кавычки
 static void print_word(const char *s) {
   putchar('"');
   for (; *s; s++) {
@@ -26,10 +27,12 @@ static void print_word(const char *s) {
   putchar('"');
 }
 
+// переводит R_IN, R_OUT, R_APPEND в >, <, >> 
 static const char *redir_sym(RedirKind k) {
   return k == R_IN ? "<" : k == R_OUT ? ">" : ">>";
 }
 
+// печатает каждое перенаправление отдельной строкой
 static void print_redirs(const Redir *r, int depth) {
   for (; r; r = r->next) {
     indent(depth);
@@ -39,6 +42,7 @@ static void print_redirs(const Redir *r, int depth) {
   }
 }
 
+// разворачивает цепочку N_PIPE и печатает стадии конвейера подряд
 static void print_stages(const Node *n, int depth) {
   if (n->kind == N_PIPE) {
     print_stages(n->left, depth);
@@ -48,6 +52,7 @@ static void print_stages(const Node *n, int depth) {
   }
 }
 
+// рекурсивное печатание узла и его дочерних элементов
 void print_ast(const Node *n, int depth) {
   if (!n) return;
   indent(depth);
@@ -95,6 +100,7 @@ void print_ast(const Node *n, int depth) {
 
 typedef struct { char *v; size_t n, cap; bool oom; } Str;
 
+// добавление в буфер
 static void put(Str *s, const char *t) {
   size_t len = strlen(t);
   if (s->oom) return;
@@ -110,6 +116,7 @@ static void put(Str *s, const char *t) {
   s->n += len;
 }
 
+// выбор записи элемента
 static void put_word(Str *s, const char *w) {
   static const char safe[] = "_-./=:,+@%^";
   bool plain = *w != '\0';
@@ -133,6 +140,7 @@ static void put_word(Str *s, const char *w) {
   put(s, "'");
 }
 
+// добавление перенаправления 
 static void put_redirs(Str *s, const Redir *r) {
   for (; r; r = r->next) {
     put(s, " ");
@@ -142,6 +150,7 @@ static void put_redirs(Str *s, const Redir *r) {
   }
 }
 
+// рекурсивный обход узлов
 static void unparse(Str *s, const Node *n) {
   if (!n) return;
   switch (n->kind) {
@@ -185,6 +194,7 @@ static void unparse(Str *s, const Node *n) {
   }
 }
 
+// создание начального буфера, запуск обхода, возврат готовой строки
 char *ast_to_string(const Node *n) {
   Str s = {0};
   unparse(&s, n);
