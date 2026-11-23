@@ -40,7 +40,7 @@ static pid_t shell_pgid;
 static struct termios shell_tmodes;
 static volatile sig_atomic_t sigint_seen;
 
-
+// отмечает, что shell получил SIGINT и пишет перевод строки через write()
 static void on_sigint(int sig) {
   int saved = errno;
   (void)sig;
@@ -49,6 +49,7 @@ static void on_sigint(int sig) {
   errno = saved;
 }
 
+// устанавливает обработчик с sigaction()
 static void set_handler(int sig, void (*h)(int)) {
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
@@ -58,17 +59,19 @@ static void set_handler(int sig, void (*h)(int)) {
   sigaction(sig, &sa, NULL);
 }
 
+// возвращает дочерним процессам стандартное поведение для сигналов
 static void default_signals(void) {
   static const int sigs[] = {SIGINT, SIGQUIT, SIGTSTP, SIGTTIN, SIGTTOU};
   for (size_t i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++) set_handler(sigs[i], SIG_DFL);
 }
 
-
+// передаёт терминал указанной группе процессов
 static void give_terminal(pid_t pgid) {
   if (!job_control) return;
   while (tcsetpgrp(tty_fd, pgid) < 0 && errno == EINTR) { }
 }
 
+// включает управление заданиями, если shell в интерактивном режиме
 void jobs_init(bool interactive) {
   if (!interactive) return;
   tty_fd = fcntl(STDIN_FILENO, F_DUPFD_CLOEXEC, TTY_FD_MIN);
@@ -103,33 +106,38 @@ fail:
   tty_fd = -1;
 }
 
+// сообщает, удалось ли включить управление
 bool jobs_enabled(void) { 
     return job_control;
 }
 
-
+// освобождает массив процессов, строку команды и саму структуру
 static void job_free(Job *j) {
   free(j->procs);
   free(j->cmd);
   free(j);
 }
 
+// 
 static Job *by_id(int id) { 
     return id >= 1 && id <= MAX_JOBS ? table[id - 1] : NULL;
 }
 
+// делает указанное задание текущим
 static void set_current(const Job *j) {
   if (cur_id == j->id) return;
   prev_id = cur_id;
   cur_id = j->id;
 }
 
+//
 static int newest_except(int except) {
   for (int id = MAX_JOBS; id >= 1; id--)
     if (table[id - 1] && id != except) return id;
   return 0;
 }
 
+// выбирает актуальные задания, если прежнее было удалено 
 static void fix_current(void) {
   if (!by_id(cur_id)) cur_id = 0;
   if (!by_id(prev_id)) prev_id = 0;
@@ -139,12 +147,14 @@ static void fix_current(void) {
   if (!prev_id) prev_id = newest_except(cur_id);
 }
 
+// убирает задания из таблицы
 static void job_remove(Job *j) {
   table[j->id - 1] = NULL;
   job_free(j);
   fix_current();
 }
 
+// находит свободный слот и создаёт Job
 Job *jobs_new(const char *cmd, bool background) {
   for (int i = 0; i < MAX_JOBS; i++) {
     if (table[i]) continue;           
@@ -165,6 +175,7 @@ Job *jobs_new(const char *cmd, bool background) {
   return NULL;
 }
 
+// добавляет процесс
 int jobs_add_proc(Job *j, pid_t pid) {
   Proc *p = realloc(j->procs, (j->nprocs + 1) * sizeof(*p));
   if (!p) return -1;
@@ -177,22 +188,32 @@ int jobs_add_proc(Job *j, pid_t pid) {
   return 0;
 }
 
+// возвращает pgid
 pid_t jobs_pgid(const Job *j) { 
     return j->nprocs ? j->pgid : 0;
 }
+
+// удаляет задание
 void jobs_discard(Job *j) { 
     job_remove(j); 
 }
+
+// возвращает id
 int jobs_id(const Job *j) { 
     return j->id; 
 }
+
+// возвращает состояние задания
 JobState jobs_state(const Job *j) {
     return j->state;
 }
+
+// возвращает id текущего задания 
 Job *jobs_current(void) { 
     return by_id(cur_id);
 }
 
+// вызывается в потомке сразу после fork()
 void jobs_child_start(pid_t pgid, bool foreground) {
   if (job_control) {
     if (pgid == 0) pgid = getpid();
@@ -213,6 +234,7 @@ void jobs_child_start(pid_t pgid, bool foreground) {
   cur_id = prev_id = 0;
 }
 
+// пересчитывает состояние job по его процессам
 static void recompute(Job *j) {
   bool running = false, stopped = false;
   for (size_t i = 0; i < j->nprocs; i++) {
@@ -222,6 +244,7 @@ static void recompute(Job *j) {
   j->state = running ? JOB_RUNNING : stopped ? JOB_STOPPED : JOB_DONE;
 }
 
+// возвращает код завершения процесса
 static int proc_code(const Proc *p) {
   int w = p->wstatus;
   if (p->state == PROC_STOPPED) return EXIT_SIGNAL_BASE + WSTOPSIG(w);
@@ -230,10 +253,12 @@ static int proc_code(const Proc *p) {
   return 0;
 }
 
+// берёт статус последнего процесса задания
 static int job_code(const Job *j) {
   return j->nprocs ? proc_code(&j->procs[j->nprocs - 1]) : 0;
 }
 
+// ищет pid в таблице заданий
 static Job *find_proc(pid_t pid, Proc **out) {
   for (int i = 0; i < MAX_JOBS; i++) {
     Job *j = table[i];
@@ -244,7 +269,7 @@ static Job *find_proc(pid_t pid, Proc **out) {
   return NULL;
 }
 
-
+// ждёт завершение или изменение состояния одного дочернего процесса
 static pid_t reap_one(bool block) {
   int st, flags = job_control ? WUNTRACED | WCONTINUED : 0;
   pid_t p;
@@ -258,9 +283,15 @@ static pid_t reap_one(bool block) {
   Job *j = find_proc(p, &pr);
   if (!j) return p;                 
   JobState before = j->state;
-  if (WIFSTOPPED(st)) { pr->state = PROC_STOPPED; pr->wstatus = st; }
+  if (WIFSTOPPED(st)) { 
+    pr->state = PROC_STOPPED;
+    pr->wstatus = st;
+  }
   else if (WIFCONTINUED(st)) pr->state = PROC_RUNNING;
-  else { pr->state = PROC_DONE; pr->wstatus = st; }
+  else { 
+    pr->state = PROC_DONE;
+    pr->wstatus = st;
+  }
   recompute(j);
   if (j->state == JOB_STOPPED && before != JOB_STOPPED) {
     j->notified = false;
@@ -269,11 +300,12 @@ static pid_t reap_one(bool block) {
   return p;
 }
 
+// собирает все уже готовые события
 static void update_nohang(void) {
-  while (reap_one(false) > 0) { /* собрать всё готовое */ }
+  while (reap_one(false) > 0) { }
 }
 
-/* ECHILD при незавершённых процессах: их уже собрал кто-то другой. */
+// помечает все оставшиеся процессы как завершённые, когда дочерних процессов уже нет
 static void forget_running(void) {
   for (int i = 0; i < MAX_JOBS; i++) {
     Job *j = table[i];
@@ -298,7 +330,7 @@ static bool any_bg_running(const void *a) {
   return false;
 }
 
-
+// 
 static int wait_for(Pending pending, const void *arg, bool interruptible) {
   sigint_seen = 0;
   while (pending(arg)) {
@@ -314,7 +346,7 @@ static int wait_for(Pending pending, const void *arg, bool interruptible) {
   return 0;
 }
 
-
+// формирует текст состояния
 static void state_text(const Job *j, char *buf, size_t n) {
   switch (j->state) {
     case JOB_RUNNING: snprintf(buf, n, "Running"); break;
@@ -331,6 +363,7 @@ static void state_text(const Job *j, char *buf, size_t n) {
   }
 }
 
+// печатает номер, метку +/'-', состояние и сохраняет текст команды
 static void print_job(FILE *f, const Job *j) {
   char st[64];
   char mark = j->id == cur_id ? '+' : j->id == prev_id ? '-' : ' ';
@@ -339,6 +372,7 @@ static void print_job(FILE *f, const Job *j) {
           j->state == JOB_RUNNING && j->background ? " &" : "");
 }
 
+// обновляет состояния, печатает все задания или выбранное, а завершённое после печать удаляет
 void jobs_print(Job *only) {
   update_nohang();
   for (int i = 0; i < MAX_JOBS; i++) {
@@ -350,6 +384,7 @@ void jobs_print(Job *only) {
   }
 }
 
+// печатает сообщения и удаляет завершённые задания
 void jobs_notify(bool print) {
   update_nohang();
   for (int i = 0; i < MAX_JOBS; i++) {
@@ -366,7 +401,7 @@ void jobs_notify(bool print) {
   }
 }
 
-
+// переводит остальные процессы в состояние PROC_RUNNING
 static void mark_running(Job *j) {
   for (size_t i = 0; i < j->nprocs; i++)
     if (j->procs[i].state == PROC_STOPPED) j->procs[i].state = PROC_RUNNING;
@@ -374,6 +409,7 @@ static void mark_running(Job *j) {
   j->notified = false;
 }
 
+// ждёт, пока задание не перестанет быть работающим
 static int finish_fg(Job *j) {
   wait_for(job_running, j, false);
   if (job_control) {
@@ -400,12 +436,14 @@ static int finish_fg(Job *j) {
   return code;
 }
 
+// помечает задание как преднеплановое, печатает ему терминал и ждёт через finish_fg()
 int jobs_run_fg(Job *j) {
   j->background = false;
   give_terminal(j->pgid);
   return finish_fg(j);
 }
 
+// помечает job как фоновую, делает текущей, печатает её номер и pid
 int jobs_run_bg(Job *j) {
   j->background = true;
   set_current(j);
@@ -413,6 +451,7 @@ int jobs_run_bg(Job *j) {
   return 0;
 }
 
+// отправляет сигнал всей группе для группы процессов
 int jobs_signal(Job *j, int sig) {
   int rc = 0;
   if (job_control) {
@@ -428,6 +467,7 @@ int jobs_signal(Job *j, int sig) {
   return rc;
 }
 
+// печатает команду, возвращает ей терминал, восстанавливает её настройки терминала
 int jobs_continue_fg(Job *j) {
   j->background = false;
   printf("%s\n", j->cmd);
@@ -440,6 +480,7 @@ int jobs_continue_fg(Job *j) {
   return finish_fg(j);
 }
 
+// печатает job фоновой и делает её текущей
 int jobs_continue_bg(Job *j) {
   j->background = true;
   mark_running(j);
@@ -450,7 +491,7 @@ int jobs_continue_bg(Job *j) {
   return 0;
 }
 
-
+// принимает строки, начинающиеся с %
 Job *jobs_find_spec(const char *spec) {
   if (!spec || spec[0] != '%') return NULL;
   const char *s = spec + 1;
@@ -462,13 +503,14 @@ Job *jobs_find_spec(const char *spec) {
   return by_id((int)id);
 }
 
+// проверяет, есть ли в таблице остановленные задания
 bool jobs_has_stopped(void) {
   for (int i = 0; i < MAX_JOBS; i++)
     if (table[i] && table[i]->state == JOB_STOPPED) return true;
   return false;
 }
 
-
+// ждёт фоновые работающие задания
 int jobs_wait_all(void) {
   if (wait_for(any_bg_running, NULL, true) < 0) return EXIT_SIGNAL_BASE + SIGINT;
   for (int i = 0; i < MAX_JOBS; i++)
@@ -476,6 +518,7 @@ int jobs_wait_all(void) {
   return 0;
 }
 
+// ждёт конкретный job
 int jobs_wait_job(Job *j) {
   if (wait_for(job_running, j, true) < 0) return EXIT_SIGNAL_BASE + SIGINT;
   int code = job_code(j);
@@ -483,6 +526,7 @@ int jobs_wait_job(Job *j) {
   return code;
 }
 
+// ищет pid в таблице и ждёт именно этот процесс
 int jobs_wait_pid(pid_t pid, int *status) {
   Proc *pr = NULL;
   Job *j = find_proc(pid, &pr);
@@ -493,7 +537,7 @@ int jobs_wait_pid(pid_t pid, int *status) {
   return 0;
 }
 
-
+// очищение структур shell при завершении
 void jobs_shutdown(void) {
   update_nohang();
   for (int i = 0; i < MAX_JOBS; i++) {
