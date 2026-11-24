@@ -33,7 +33,7 @@ static int options(int argc, char **argv, const char **command, DumpMode *dump) 
   return 0;
 }
 
-// печатает текст слова в двойных кавычках, экранируя " и \
+// печатает текст слова в двойных кавычках, экранируя " и '\'
 static void print_word_escaped(const char *s) {
   putchar('"');
   for (; *s; s++) {
