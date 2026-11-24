@@ -2,7 +2,6 @@ CC      ?= gcc
 TARGET  := mysh
 SRCS    := main.c lexer.c parser.c ast.c executor.c builtins.c jobs.c
 
-# C23: gcc < 14 знает его как c2x
 STD := $(shell echo 'int main(void){return 0;}' | $(CC) -std=c23 -x c - -fsyntax-only 2>/dev/null && echo c23 || echo c2x)
 
 WARN     := -Wall -Wextra
