@@ -10,15 +10,17 @@ enum { STATUS_SYNTAX = 2 };
 typedef enum { DUMP_NONE, DUMP_TOKENS, DUMP_AST } DumpMode;
 typedef enum { IN_DONE, IN_MORE, IN_MORE_BACKSLASH, IN_ERROR } InputState;
 
-static const char PROMPT[] = "mysh$ ";
+static const char PROMPT[] = "mysh$ "; 
 static const char PROMPT2[] = "> ";
 static const char CONTINUATION[] = "\\\n";
 
+// печатает допустимый формат запуска 
 static int usage(void) {
   fprintf(stderr, "mysh: usage: mysh [--dump-tokens|--dump-ast] [-c command]\n");
   return STATUS_SYNTAX;
 }
 
+// разбирает аргументы командной строки, записывая выбранный режим дампа и указатель на строку после -с
 static int options(int argc, char **argv, const char **command, DumpMode *dump) {
   *command = NULL;
   *dump = DUMP_NONE;
@@ -31,6 +33,7 @@ static int options(int argc, char **argv, const char **command, DumpMode *dump) 
   return 0;
 }
 
+// печатает текст слова в двойных кавычках, экранируя " и \
 static void print_word_escaped(const char *s) {
   putchar('"');
   for (; *s; s++) {
@@ -43,6 +46,7 @@ static void print_word_escaped(const char *s) {
   putchar('"');
 }
 
+// проходит по массиву токенов и печатает имя типа каждого токена
 static void dump_tokens(const Tokens *t) {
   for (size_t i = 0; i < t->n; i++) {
     fputs(token_name(t->v[i].kind), stdout);
@@ -54,13 +58,14 @@ static void dump_tokens(const Tokens *t) {
   }
 }
 
+// печатает сообщение об ошибке, устанавливая STATUS_SYNTAX
 static InputState syntax_error(const char *msg, int *status) {
   fprintf(stderr, "mysh: %s\n", msg);
   *status = STATUS_SYNTAX;
   return IN_ERROR;
 }
 
-
+// пробует разобрать накопленный текст
 static InputState process(const char *text, DumpMode dump, bool at_eof, int *status) {
   Tokens tokens;
   char *err = NULL;
@@ -106,6 +111,7 @@ static InputState process(const char *text, DumpMode dump, bool at_eof, int *sta
   return IN_DONE;
 }
 
+// при конце ввода вызывает process() с признаком at_eof=true
 static InputState process_at_eof(char *text, size_t len, DumpMode dump, int *status) {
   size_t cl = sizeof(CONTINUATION) - 1;
   for (;;) {
