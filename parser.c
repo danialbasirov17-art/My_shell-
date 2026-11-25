@@ -14,6 +14,7 @@ typedef struct {
 
 static Node *list(Parser *p);
 
+// возвращает вид текущего токена
 static TokenKind peek(const Parser *p) { 
     return p->t->v[p->p].kind; 
 }
