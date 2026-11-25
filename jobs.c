@@ -118,7 +118,6 @@ static void job_free(Job *j) {
   free(j);
 }
 
-// 
 static Job *by_id(int id) { 
     return id >= 1 && id <= MAX_JOBS ? table[id - 1] : NULL;
 }
@@ -130,7 +129,7 @@ static void set_current(const Job *j) {
   cur_id = j->id;
 }
 
-//
+// наибольший номер среди заданий, кроме except
 static int newest_except(int except) {
   for (int id = MAX_JOBS; id >= 1; id--)
     if (table[id - 1] && id != except) return id;
@@ -330,7 +329,7 @@ static bool any_bg_running(const void *a) {
   return false;
 }
 
-// 
+// универсальный блокирующий цикл: пока pending(art) истинен, вызывает reap_one()
 static int wait_for(Pending pending, const void *arg, bool interruptible) {
   sigint_seen = 0;
   while (pending(arg)) {
